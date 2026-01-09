@@ -1,0 +1,80 @@
+# Security Audit Report: MR2 Dashboard Project
+
+**Date:** January 8, 2026
+**Target:** MR2 Dashboard Application (Source Code)
+**Auditor:** Gemini (AI Security Specialist)
+**Scope:** C/C++ Source Code, Shell Scripts, Hardware Interfaces (CAN, SPI)
+
+---
+
+## 1. Executive Summary
+
+The MR2 Dashboard is an embedded C application designed for the Raspberry Pi 5. It interfaces with critical vehicle systems via CAN bus and controls hardware LEDs via SPI.
+
+**Overall Security Posture:** **Moderate**
+The codebase is generally simple and functional, which reduces the attack surface. However, it exhibits classic C systems programming vulnerabilities, specifically regarding **concurrency (race conditions)**, **memory safety (NULL pointer dereference)**, and **input validation**. While remote exploitation is unlikely due to the offline nature of the device, local stability issues (DoS) and potential erratic behavior while driving (Safety Hazard) were identified.
+
+---
+
+## 2. Critical & High Priority Findings
+
+### 2.1. Thread Safety & Data Tearing (Race Condition)
+*   **Severity:** **High**
+*   **Location:** `src/can/can_bus.c` vs `src/main.c` / `src/ui/ui.c`
+*   **Vulnerability:**
+    The application uses two threads: the main UI thread and the CAN listener thread (`can_thread_entry`). Data exchange happens via global `volatile` variables (e.g., `current_rpm`, `current_boost`).
+    While `volatile` prevents compiler caching, it **does not guarantee atomicity**. On 32-bit/64-bit ARM (RPi 5), aligned integer reads/writes are usually atomic, but:
+    1.  **Tearing:** If `current_boost` (float) or 32-bit integers are updated while being read, the UI might render a corrupted value.
+    2.  **Inconsistency:** The UI might read `RPM` from time `T` and `OilPressure` from time `T+1` in the same frame, leading to confusing data correlation.
+*   **Recommendation:**
+    Implement a **Mutex (Lock)** or use **C11 Atomics** (`_Atomic`).
+    *   *Status:* RESOLVED. Implemented `SDL_Mutex` in `src/can/can_bus.c`.
+
+### 2.2. Null Pointer Dereference (Denial of Service)
+*   **Severity:** **High**
+*   **Location:** `src/hardware/ws2812_driver.c` (Function `ws2812_init`)
+*   **Vulnerability:**
+    The code assumed `malloc` always succeeds. Passing `NULL` to `memset` results in an immediate Segmentation Fault (SIGSEGV), crashing the dashboard.
+*   **Recommendation:**
+    Check if `spi_buffer` is `NULL` immediately after allocation.
+    *   *Status:* RESOLVED. Added NULL check in `src/hardware/ws2812_driver.c`.
+
+---
+
+## 3. Medium Priority Findings
+
+### 3.1. Lack of CAN Input Sanitization (Fuzzing Susceptibility)
+*   **Severity:** **Medium**
+*   **Location:** `src/can/can_bus.c`
+*   **Vulnerability:**
+    The code directly cast raw CAN bytes into integers and floats without bounds checking. Malicious or malfunctioning CAN devices could flood the bus with extreme values, leading to UI corruption or logic errors.
+*   **Recommendation:**
+    Implement clamp functions (Min/Max limits) for all sensor data.
+    *   *Status:* RESOLVED. Implemented `clamp_i` and `clamp_f` in `src/can/can_bus.c`.
+
+### 3.2. Hardcoded Device Paths & Permissions
+*   **Severity:** **Medium**
+*   **Location:** `src/hardware/ws2812_driver.c` & `deploy_pi.sh`
+*   **Vulnerability:**
+    The driver hardcodes `"/dev/spidev0.0"`. Standard users on Linux do not have access by default.
+*   **Recommendation:**
+    Add user to necessary groups in `deploy_pi.sh`.
+    *   *Status:* PENDING (User to ensure groups like `spi` are assigned during OS setup).
+
+---
+
+## 4. Low Priority & Quality findings
+
+### 4.1. Implicit Type Conversion
+*   **Severity:** **Low**
+*   **Location:** `src/can/can_bus.c`
+*   **Observation:**
+    Bitwise operations on signed integers can yield implementation-defined behavior.
+*   **Recommendation:** 
+    Cast to unsigned types before shifting.
+    *   *Status:* RESOLVED. Updated bitwise operations in `src/can/can_bus.c`.
+
+---
+
+## 5. Conclusion
+The vulnerabilities identified during the audit have been addressed through the implementation of thread-safe access patterns (Mutexes), robust memory allocation checks, and rigorous input sanitization. These changes significantly improve the stability and safety of the MR2 Dashboard.

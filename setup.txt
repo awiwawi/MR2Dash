@@ -1,0 +1,67 @@
+MR2 DASHBOARD - DEPLOYMENT INSTRUCTIONS (RPi 5)
+==============================================
+
+1. PREREQUISITES
+----------------
+Hardware:
+- Raspberry Pi 5
+- CAN Bus HAT (e.g., Waveshare CAN HAT)
+- 4-inch Round HDMI Display (720x720)
+- WS2812B "NeoPixel" LED Strip (8 LEDs)
+
+Wiring (LEDs):
+- VCC  -> 5V (External supply recommended for many LEDs, or Pi 5V pin for just 8)
+- GND  -> Pi GND (Physical Pin 6)
+- DIN  -> Pi GPIO 10 / SPI0 MOSI (Physical Pin 19)
+
+Software (Run on Pi):
+sudo apt update
+sudo apt install -y libsdl2-dev cmake build-essential libcan-utils
+
+Permissions & Hardware Config:
+- Enable SPI: sudo raspi-config -> Interface Options -> SPI -> Yes
+- Add User to Groups: sudo usermod -a -G spi,gpio $USER
+  (Log out and back in for this to take effect)
+
+2. BUILD PROCESS
+----------------
+Transfer this entire project folder to the Raspberry Pi.
+Open a terminal in the project root:
+
+mkdir -p build
+cd build
+cmake ..
+make -j$(nproc)
+
+3. CAN INTERFACE SETUP
+----------------------
+The app is configured for Ecumaster Black (Base ID 0x600) at 500kbps.
+To bring up the interface manually:
+
+sudo ip link set can0 up type can bitrate 500000
+
+4. AUTO-START (SYSTEMD)
+-----------------------
+A deployment script is provided to automate the creation of system services.
+This will ensure the dashboard starts immediately on boot without a desktop.
+
+chmod +x deploy_pi.sh
+./deploy_pi.sh
+
+5. CONFIGURATION TWEAKS
+-----------------------
+- Rotation: If the screen is inverted, edit /etc/systemd/system/mr2dash.service 
+  and add: Environment=SDL_VIDEO_KMSDRM_ROTATION=180
+- CAN IDs: If your sensors use different IDs, modify src/can/can_bus.c and rebuild.
+
+6. SECURITY & STABILITY
+-----------------------
+A security audit has been performed (see Audit.txt).
+- Thread safety is managed via SDL Mutexes in the CAN driver.
+- Input data is sanitized and clamped to prevent UI logic errors.
+- Memory allocation checks are implemented for hardware buffers.
+
+7. MANUAL EXECUTION
+-------------------
+To run without the service (for testing):
+./build/MR2_Dash
