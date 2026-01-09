@@ -8,7 +8,7 @@
 static volatile int current_rpm = 0;
 static volatile int current_speed = 0;
 static volatile float current_boost = 0.0f;
-static volatile int current_oil_press = 0;
+static volatile float current_oil_press = 0.0f; // Changed to float
 static volatile int current_clt = 0;
 static volatile int current_oil_t = 0;
 static volatile int current_egt = 0;
@@ -103,7 +103,9 @@ int can_thread_entry(void* data) {
             case 0x603: {
                 current_clt = clamp_i((int)((int8_t)frame.data[0]), -40, 150);
                 current_oil_t = clamp_i((int)((int8_t)frame.data[1]), -40, 180);
-                current_oil_press = clamp_i((int)frame.data[2], 0, 12);
+                
+                // Assuming Oil Press is sent as Bar * 10 or similar from ECU
+                current_oil_press = clamp_f((float)frame.data[2] / 10.0f, 0.0f, 12.0f);
                 break;
             }
         }
@@ -133,7 +135,10 @@ int can_thread_entry(void* data) {
 
         current_speed = current_rpm / 100;
         current_boost = ((float)current_rpm / 8000.0f) * 2.5f - 1.0f;
-        current_oil_press = clamp_i(2 + (current_rpm / 2000), 0, 10);
+        
+        // Smoother Oil Press Simulation: Base 2 bar + RPM link + aggressive jitter
+        current_oil_press = clamp_f(2.0f + ((float)current_rpm / 2500.0f) + ((rand() % 100) / 100.0f), 0.0f, 10.0f); 
+        
         current_egt = 300 + (current_rpm / 15);
         current_clt = 88 + (rand() % 3);
         current_oil_t = 95 + (rand() % 2);
@@ -165,9 +170,9 @@ float can_get_boost(void) {
     SDL_UnlockMutex(data_mutex);
     return val;
 }
-int can_get_oil_press(void) { 
+float can_get_oil_press(void) { 
     SDL_LockMutex(data_mutex);
-    int val = current_oil_press;
+    float val = current_oil_press;
     SDL_UnlockMutex(data_mutex);
     return val;
 }

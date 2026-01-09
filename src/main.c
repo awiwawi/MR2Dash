@@ -73,7 +73,7 @@ int main(int argc, char **argv) {
         int rpm = can_get_rpm();
         int speed = can_get_speed();
         float boost = can_get_boost();
-        int oil_press = can_get_oil_press();
+        float oil_press = can_get_oil_press();
         int clt = can_get_coolant_temp();
         int oil_t = can_get_oil_temp();
         int egt = can_get_egt();

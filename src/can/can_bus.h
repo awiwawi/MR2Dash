@@ -14,7 +14,7 @@ int can_thread_entry(void* data);
 int can_get_rpm(void);
 int can_get_speed(void);
 float can_get_boost(void);
-int can_get_oil_press(void);
+float can_get_oil_press(void); // Changed to float
 int can_get_coolant_temp(void);
 int can_get_oil_temp(void);
 int can_get_egt(void);
